@@ -1,0 +1,209 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'signing'
+    id 'com.google.protobuf' version '0.9.4'
+    id 'org.jreleaser' version '1.23.0'  // Maven Central via Central Portal
+}
+
+group = 'cloud.kitelang'
+version = '0.1.0'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+def grpcVersion = '1.77.0'
+def protobufVersion = '4.33.2'
+def jacksonVersion = '2.18.4'
+// bcprov MUST be pinned to the SAME release as bcpg (see the dependency comment below).
+def bouncyCastleVersion = '1.80.2'
+def lombok = '1.18.44'
+
+dependencies {
+    // gRPC + Protobuf. The generated tfplugin5/tfplugin6 stubs and the neutral RPC
+    // facade are part of this library's public surface — consumers compile against
+    // ProviderGrpc, the DynamicValue messages, and ByteString — so expose them as 'api'.
+    api "io.grpc:grpc-protobuf:${grpcVersion}"
+    api "io.grpc:grpc-stub:${grpcVersion}"
+    api "com.google.protobuf:protobuf-java:${protobufVersion}"
+
+    // Internal runtime concerns of GoPluginClient: the Netty transport it dials the
+    // provider over, and the gRPC health service it polls during the go-plugin handshake.
+    // Consumers never name these types, so keep them off the compile classpath.
+    implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
+    implementation "io.grpc:grpc-services:${grpcVersion}"
+
+    // Required for the @Generated annotation protoc emits into the generated stubs.
+    compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
+
+    // MessagePack: cty DynamicValue payloads are msgpack-encoded (CtyCodec).
+    implementation 'org.msgpack:msgpack-core:0.9.8'
+
+    // Jackson: cty type JSON (CtyCodec) and registry metadata (TerraformRegistryClient).
+    implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+
+    // BouncyCastle OpenPGP — verifies the detached GPG signature over a provider's
+    // SHA256SUMS file against the registry-advertised public key (OpenPgpSignatureVerifier).
+    // bcprov MUST be pinned to the SAME release as bcpg: bcpg's POM depends on bcprov via
+    // the loose range [1.80,1.81), which otherwise resolves to a patch (1.80.2) that
+    // relocated internal ASN.1 classes and breaks bcpg 1.80's PGPUtil at runtime
+    // (NoClassDefFoundError CryptlibObjectIdentifiers).
+    implementation "org.bouncycastle:bcpg-jdk18on:${bouncyCastleVersion}"
+    implementation "org.bouncycastle:bcprov-jdk18on:${bouncyCastleVersion}"
+
+    // Lombok
+    compileOnly "org.projectlombok:lombok:${lombok}"
+    annotationProcessor "org.projectlombok:lombok:${lombok}"
+
+    // SLF4J API is part of the surface (loggers on public classes); JDK binding for tests.
+    api 'org.slf4j:slf4j-api:2.0.17'
+    testRuntimeOnly 'org.slf4j:slf4j-jdk14:2.0.17'
+
+    // Testing
+    testImplementation platform('org.junit:junit-bom:6.0.1')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.mockito:mockito-core:5.14.2'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.14.2'
+    // In-process gRPC transport: the protocol tests drive the real generated stubs and
+    // marshalling against a fake provider service, with no subprocess.
+    testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${protobufVersion}"
+    }
+    plugins {
+        grpc {
+            artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {}
+        }
+    }
+}
+
+// The com.google.protobuf plugin already registers the generated grpc/java sources into
+// the main source set; adding them again by hand made sourcesJar see each file twice.
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+    withJavadocJar()
+    withSourcesJar()
+}
+
+// Generated protobuf/gRPC sources do not carry javadoc doclint-clean comments; do not
+// let the (Maven-Central-required) javadoc jar fail the build over them.
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+test {
+    useJUnitPlatform()
+    // msgpack needs java.nio access for CtyCodec's DynamicValue encoding. The umbrella
+    // root build adds these to every Test task; declare them here too so the library
+    // builds standalone (cd tfplugin-jvm && ./gradlew test).
+    jvmArgs '--add-opens=java.base/java.nio=ALL-UNNAMED',
+            '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED'
+}
+
+// ========== Publishing (configured, not executed here) ==========
+// The library CAN be released to Maven Central, but the first release is a manual owner
+// step needing signing keys + Central Portal credentials (kitecorp/tfplugin-jvm#2).
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            artifactId = 'tfplugin-jvm'
+
+            pom {
+                name = 'tfplugin-jvm'
+                description = 'A JVM client for the Terraform plugin protocol (tfplugin5/6, ' +
+                        'go-plugin handshake, cty msgpack, registry download + OpenPGP verification).'
+                url = 'https://github.com/kitecorp/tfplugin-jvm'
+                packaging = 'jar'
+
+                licenses {
+                    license {
+                        name = 'Apache License 2.0'
+                        url = 'https://www.apache.org/licenses/LICENSE-2.0'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'kitecorp'
+                        name = 'Kite Team'
+                        url = 'https://github.com/kitecorp'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/kitecorp/tfplugin-jvm.git'
+                    developerConnection = 'scm:git:ssh://github.com/kitecorp/tfplugin-jvm.git'
+                    url = 'https://github.com/kitecorp/tfplugin-jvm'
+                }
+            }
+        }
+    }
+
+    repositories {
+        // Staging directory JReleaser deploys from.
+        maven {
+            name = 'stagingDeploy'
+            url = layout.buildDirectory.dir('staging-deploy')
+        }
+    }
+}
+
+// Sign publications only when a GPG key is present (never during ordinary builds/CI).
+signing {
+    def signingKey = System.getenv('GPG_PRIVATE_KEY')
+    def signingPassword = System.getenv('GPG_PASSPHRASE') ?: ''
+    if (signingKey) {
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign publishing.publications.maven
+    }
+}
+tasks.withType(Sign).configureEach {
+    onlyIf { System.getenv('GPG_PRIVATE_KEY') != null }
+}
+
+jreleaser {
+    signing {
+        active = 'ALWAYS'
+        armored = true
+        mode = 'MEMORY'  // keys from environment variables
+    }
+    deploy {
+        maven {
+            mavenCentral {
+                sonatype {
+                    active = 'ALWAYS'
+                    url = 'https://central.sonatype.com/api/v1/publisher'
+                    stagingRepository('build/staging-deploy')
+                    applyMavenCentralRules = true
+                    retryDelay = 30
+                    maxRetries = 60
+                }
+            }
+        }
+    }
+}
+
+tasks.register('publishToMavenCentral') {
+    group = 'publishing'
+    description = 'Publish to Maven Central via JReleaser (requires signing keys + Central Portal credentials)'
+    dependsOn 'publishAllPublicationsToStagingDeployRepository'
+    dependsOn 'jreleaserDeploy'
+}
+
+tasks.named('jreleaserDeploy') {
+    dependsOn 'publishAllPublicationsToStagingDeployRepository'
+}
