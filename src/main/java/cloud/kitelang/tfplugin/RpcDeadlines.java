@@ -69,19 +69,28 @@ public record RpcDeadlines(Duration controlPlane, Duration resourceOperation) {
     /** Env var overriding {@link #resourceOperation()} (whole seconds). */
     static final String RESOURCE_ENV = "KITE_TF_BRIDGE_RESOURCE_DEADLINE_SECONDS";
 
+    /** Rejects a zero/negative deadline in either tier before construction completes. */
     public RpcDeadlines {
         requirePositive(controlPlane, "controlPlane");
         requirePositive(resourceOperation, "resourceOperation");
     }
 
-    /** The built-in defaults (60s control-plane, 6h resource operations). */
+    /**
+     * The built-in defaults (60s control-plane, 6h resource operations).
+     *
+     * @return deadlines using {@link #DEFAULT_CONTROL_PLANE_SECONDS} and {@link #DEFAULT_RESOURCE_OPERATION_SECONDS}
+     */
     public static RpcDeadlines defaults() {
         return new RpcDeadlines(
                 Duration.ofSeconds(DEFAULT_CONTROL_PLANE_SECONDS),
                 Duration.ofSeconds(DEFAULT_RESOURCE_OPERATION_SECONDS));
     }
 
-    /** Reads {@link #CONTROL_PLANE_ENV} / {@link #RESOURCE_ENV}, falling back to {@link #defaults()}. */
+    /**
+     * Reads {@link #CONTROL_PLANE_ENV} / {@link #RESOURCE_ENV}, falling back to {@link #defaults()}.
+     *
+     * @return deadlines resolved from the process environment
+     */
     public static RpcDeadlines fromEnvironment() {
         return fromEnvironment(System::getenv);
     }

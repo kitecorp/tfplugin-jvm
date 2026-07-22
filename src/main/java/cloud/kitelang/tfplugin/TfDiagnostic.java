@@ -15,19 +15,32 @@ package cloud.kitelang.tfplugin;
 public record TfDiagnostic(Severity severity, String summary, String detail,
                            TfAttributePath attributePath) {
 
-    /** Creates a diagnostic without an attribute path. */
+    /**
+     * Creates a diagnostic without an attribute path.
+     *
+     * @param severity the diagnostic severity
+     * @param summary  short human-readable problem summary
+     * @param detail   optional longer description (empty string when absent)
+     */
     public TfDiagnostic(Severity severity, String summary, String detail) {
         this(severity, summary, detail, null);
     }
 
     /** Mirrors the {@code Diagnostic.Severity} enum shared by both protocol versions. */
     public enum Severity {
+        /** The provider sent no recognizable severity (proto default / unset). */
         INVALID,
+        /** The operation's result cannot be trusted; the practitioner-facing run fails. */
         ERROR,
+        /** Advisory only; the operation's result still stands. */
         WARNING
     }
 
-    /** True for error-severity diagnostics — the operation's result cannot be trusted. */
+    /**
+     * True for error-severity diagnostics — the operation's result cannot be trusted.
+     *
+     * @return whether {@link #severity()} is {@link Severity#ERROR}
+     */
     public boolean isError() {
         return severity == Severity.ERROR;
     }

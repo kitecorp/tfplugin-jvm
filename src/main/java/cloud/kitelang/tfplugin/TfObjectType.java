@@ -23,6 +23,7 @@ import java.util.List;
  */
 public record TfObjectType(List<TfAttribute> attributes, TfNestedBlock.Nesting nesting) {
 
+    /** Defensively copies {@link #attributes} to an immutable list. */
     public TfObjectType {
         attributes = List.copyOf(attributes);
     }

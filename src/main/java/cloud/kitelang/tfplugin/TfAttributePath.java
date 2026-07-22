@@ -12,6 +12,7 @@ import java.util.List;
  */
 public record TfAttributePath(List<Step> steps) {
 
+    /** Defensively copies {@link #steps} to an immutable list. */
     public TfAttributePath {
         steps = List.copyOf(steps);
     }
@@ -26,19 +27,41 @@ public record TfAttributePath(List<Step> steps) {
      */
     public record Step(String attributeName, String elementKeyString, Long elementKeyInt) {
 
+        /**
+         * An attribute-name selector, e.g. the {@code length} step in {@code tags.length}.
+         *
+         * @param name the attribute name in the current object
+         * @return a step selecting that attribute
+         */
         public static Step attribute(String name) {
             return new Step(name, null, null);
         }
 
+        /**
+         * A string-key selector into a map or set, e.g. {@code "env"} in {@code tags["env"]}.
+         *
+         * @param key the string key
+         * @return a step selecting that key
+         */
         public static Step stringKey(String key) {
             return new Step(null, key, null);
         }
 
+        /**
+         * An integer-index selector into a list, e.g. {@code 0} in {@code ingress[0]}.
+         *
+         * @param index the zero-based element index
+         * @return a step selecting that index
+         */
         public static Step intKey(long index) {
             return new Step(null, null, index);
         }
 
-        /** An unset selector (proto {@code SELECTOR_NOT_SET}); renders as {@code <?>}. */
+        /**
+         * An unset selector (proto {@code SELECTOR_NOT_SET}); renders as {@code <?>}.
+         *
+         * @return a step with no selector set
+         */
         public static Step unset() {
             return new Step(null, null, null);
         }

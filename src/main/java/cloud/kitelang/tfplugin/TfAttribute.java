@@ -37,6 +37,14 @@ public record TfAttribute(String name, String typeJson, boolean required, boolea
      * Plain attribute with no {@code nested_type} structure — every tfplugin5
      * attribute and every tfplugin6 attribute typed by cty bytes. Nested
      * attributes use the canonical constructor with a non-null {@code nestedType}.
+     *
+     * @param name      snake_case attribute name
+     * @param typeJson  JSON-encoded cty type of the attribute's value
+     * @param required  the practitioner must set a value
+     * @param optional  the practitioner may set a value
+     * @param computed  the provider fills in a value
+     * @param sensitive the value must not be displayed
+     * @param writeOnly the value is accepted on writes but never stored in state
      */
     public TfAttribute(String name, String typeJson, boolean required, boolean optional,
                        boolean computed, boolean sensitive, boolean writeOnly) {

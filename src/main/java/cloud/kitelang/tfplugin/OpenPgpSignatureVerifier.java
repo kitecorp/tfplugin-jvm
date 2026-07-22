@@ -43,6 +43,10 @@ public class OpenPgpSignatureVerifier {
      */
     private static final Provider BOUNCY_CASTLE = new BouncyCastleProvider();
 
+    /** Creates a verifier. Instances are stateless; every check is fail-closed per-call. */
+    public OpenPgpSignatureVerifier() {
+    }
+
     /**
      * Verifies the detached signature against a set of candidate public keys, succeeding if
      * <em>any</em> of them is the genuine signer.

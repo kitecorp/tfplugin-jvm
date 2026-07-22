@@ -10,6 +10,7 @@ import java.util.List;
  */
 public record TfBlock(List<TfAttribute> attributes, List<TfNestedBlock> blockTypes) {
 
+    /** Defensively copies {@link #attributes} and {@link #blockTypes} to immutable lists. */
     public TfBlock {
         attributes = List.copyOf(attributes);
         blockTypes = List.copyOf(blockTypes);
@@ -20,6 +21,8 @@ public record TfBlock(List<TfAttribute> attributes, List<TfNestedBlock> blockTyp
      * depth — is sensitive. A nested block surfaces as a single property, so
      * this is the sensitivity of that property: masking cannot reach
      * individual leaves inside the rendered value (kitecorp/kite-providers#6).
+     *
+     * @return whether this block or any descendant nested block is sensitive
      */
     public boolean hasSensitiveValues() {
         return attributes.stream().anyMatch(TfAttribute::sensitive)

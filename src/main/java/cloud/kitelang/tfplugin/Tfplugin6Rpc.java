@@ -29,6 +29,12 @@ public final class Tfplugin6Rpc implements TerraformProviderRpc {
 
     private final ProviderGrpc.ProviderBlockingStub stub;
 
+    /**
+     * Wraps a tfplugin6 blocking stub, negotiated by {@link GoPluginClient} during the
+     * go-plugin handshake.
+     *
+     * @param stub the generated tfplugin6 gRPC blocking stub
+     */
     public Tfplugin6Rpc(ProviderGrpc.ProviderBlockingStub stub) {
         this.stub = stub;
     }

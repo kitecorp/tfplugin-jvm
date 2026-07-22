@@ -21,6 +21,12 @@ public final class Tfplugin5Rpc implements TerraformProviderRpc {
 
     private final ProviderGrpc.ProviderBlockingStub stub;
 
+    /**
+     * Wraps a tfplugin5 blocking stub, negotiated by {@link GoPluginClient} during the
+     * go-plugin handshake.
+     *
+     * @param stub the generated tfplugin5 gRPC blocking stub
+     */
     public Tfplugin5Rpc(ProviderGrpc.ProviderBlockingStub stub) {
         this.stub = stub;
     }
@@ -177,10 +183,22 @@ public final class Tfplugin5Rpc implements TerraformProviderRpc {
     // tfplugin5 -> neutral model conversions
     // ---------------------------------------------------------------
 
+    /**
+     * Converts a tfplugin5 {@code Schema} message to the neutral model.
+     *
+     * @param schema the generated tfplugin5 schema message
+     * @return the equivalent neutral {@link TfSchema}
+     */
     public static TfSchema toTfSchema(Tfplugin5.Schema schema) {
         return new TfSchema(schema.getVersion(), toTfBlock(schema.getBlock()));
     }
 
+    /**
+     * Converts a tfplugin5 {@code Schema.Block} message to the neutral model.
+     *
+     * @param block the generated tfplugin5 block message
+     * @return the equivalent neutral {@link TfBlock}
+     */
     public static TfBlock toTfBlock(Tfplugin5.Schema.Block block) {
         return new TfBlock(
                 block.getAttributesList().stream().map(Tfplugin5Rpc::toTfAttribute).toList(),

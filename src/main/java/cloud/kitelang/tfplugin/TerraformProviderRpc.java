@@ -10,6 +10,7 @@ import java.util.Map;
  * messages for these operations but name several RPCs differently:</p>
  *
  * <table>
+ *   <caption>RPC name by protocol version</caption>
  *   <tr><th>Operation</th><th>tfplugin5 RPC</th><th>tfplugin6 RPC</th></tr>
  *   <tr><td>{@link #getProviderSchema()}</td><td>{@code GetSchema}</td><td>{@code GetProviderSchema}</td></tr>
  *   <tr><td>{@link #validateProviderConfig(byte[])}</td><td>{@code PrepareProviderConfig}</td><td>{@code ValidateProviderConfig}</td></tr>
@@ -186,13 +187,18 @@ public interface TerraformProviderRpc {
                           Map<String, TfSchema> dataSourceSchemas,
                           List<TfDiagnostic> diagnostics) {
 
+        /** Defensively copies the schema maps and diagnostics list to immutable copies. */
         public ProviderSchema {
             resourceSchemas = Map.copyOf(resourceSchemas);
             dataSourceSchemas = Map.copyOf(dataSourceSchemas);
             diagnostics = List.copyOf(diagnostics);
         }
 
-        /** True when any diagnostic is an error — the schemas cannot be trusted. */
+        /**
+         * True when any diagnostic is an error — the schemas cannot be trusted.
+         *
+         * @return whether {@link #diagnostics()} contains an error-severity entry
+         */
         public boolean hasErrors() {
             return diagnostics.stream().anyMatch(TfDiagnostic::isError);
         }

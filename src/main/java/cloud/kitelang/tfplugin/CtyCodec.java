@@ -28,7 +28,7 @@ import java.util.Set;
  * property's cty type determines how its value is serialised. This codec translates
  * between Kite's {@code Map<String, Object>} property bags and those msgpack bytes.</p>
  *
- * <h3>Supported cty types</h3>
+ * <h2>Supported cty types</h2>
  * <ul>
  *   <li>{@code "string"} &mdash; msgpack string / Java {@link String}</li>
  *   <li>{@code "number"} &mdash; msgpack int, float, or string / Java {@link Number} or {@link BigDecimal}</li>
@@ -45,6 +45,10 @@ import java.util.Set;
  *     Terraform object wire format</a>
  */
 public class CtyCodec {
+
+    /** Creates a codec. Instances are stateless; {@link #encode} and {@link #decode} carry no state between calls. */
+    public CtyCodec() {
+    }
 
     /** Sentinel object representing a Terraform "unknown" value (not yet computed). */
     public static final Object UNKNOWN = new Object() {

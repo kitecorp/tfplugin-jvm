@@ -99,10 +99,13 @@ java {
     withSourcesJar()
 }
 
-// Generated protobuf/gRPC sources do not carry javadoc doclint-clean comments; do not
-// let the (Maven-Central-required) javadoc jar fail the build over them.
+// Generated protobuf/gRPC stubs (packages 'tfplugin5'/'tfplugin6') carry protoc's own
+// comments, which are not doclint-clean HTML; excluding them from the javadoc SOURCE
+// (not just relaxing doclint) keeps full doclint enforcement on the hand-written
+// cloud.kitelang.tfplugin public API, so a real javadoc regression there still fails
+// the (Maven-Central-required) javadoc jar instead of being silently masked.
 tasks.withType(Javadoc).configureEach {
-    options.addStringOption('Xdoclint:none', '-quiet')
+    exclude 'tfplugin5/**', 'tfplugin6/**'
 }
 
 test {
