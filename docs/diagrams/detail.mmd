@@ -1,0 +1,27 @@
+flowchart TB
+    subgraph JVM["JVM process (your application)"]
+        App["Your application code"]
+        Registry["TerraformRegistryClient"]
+        Client["GoPluginClient"]
+        Rpc["TerraformProviderRpc facade<br/>(Tfplugin5Rpc / Tfplugin6Rpc)"]
+        Codec["CtyCodec"]
+    end
+
+    subgraph Subprocess["Provider subprocess"]
+        Bin["Terraform provider binary<br/>(e.g. terraform-provider-random)"]
+    end
+
+    App -- "1. ensureProvider(addr, version)" --> Registry
+    Registry -- "GPG-verified binary path" --> App
+    App -- "2. new GoPluginClient(path)" --> Client
+    Client -- "3. launch process, magic cookie" --> Bin
+    Bin -- "4. go-plugin handshake line" --> Client
+    Client -- "5. gRPC channel + health check" --> Bin
+    Client -- "6. select facade by negotiated protocol" --> Rpc
+    App -- "7. getProviderSchema()" --> Rpc
+    App -- "8. encode(config)" --> Codec
+    Codec -- "cty msgpack" --> Rpc
+    Rpc -- "9. PlanResourceChange, ApplyResourceChange,<br/>ReadResource, ReadDataSource RPCs" --> Bin
+    Bin -- "state (cty msgpack)" --> Rpc
+    Rpc -- "cty msgpack" --> Codec
+    Codec -- "decode(bytes)" --> App

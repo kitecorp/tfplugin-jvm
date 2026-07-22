@@ -50,25 +50,10 @@ downloads and runs — so a single dependency reaches the entire Terraform
 provider ecosystem (AWS, Google Cloud, Azure, and thousands more) with no Go
 code, no per-provider SDKs, and no separate sidecar process.
 
-```mermaid
-flowchart LR
-    App["Any JVM application<br/>(Java · Kotlin · Scala)"]
-    Lib["tfplugin-jvm"]
-
-    subgraph Providers["Unmodified Terraform provider binaries"]
-        direction TB
-        AWS["aws"]
-        GCP["google"]
-        AZ["azurerm"]
-        Etc["… the Terraform<br/>provider ecosystem"]
-    end
-
-    Cloud["Cloud &amp; SaaS APIs"]
-
-    App -->|"embeds"| Lib
-    Lib -->|"launch · go-plugin / gRPC"| Providers
-    Providers -->|"provider SDKs"| Cloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/overview-dark.svg">
+  <img alt="A JVM application embeds tfplugin-jvm, which launches the unmodified Terraform provider binaries over go-plugin/gRPC; those providers drive cloud and SaaS APIs." src="docs/diagrams/overview-light.svg">
+</picture>
 
 ### In detail
 
@@ -77,35 +62,10 @@ in-process with your application. The only external process is the Terraform
 provider binary itself — there is no sidecar, no Go code to maintain, and no
 indirection through another RPC protocol.
 
-```mermaid
-flowchart TB
-    subgraph JVM["JVM process (your application)"]
-        App["Your application code"]
-        Registry["TerraformRegistryClient"]
-        Client["GoPluginClient"]
-        Rpc["TerraformProviderRpc facade<br/>(Tfplugin5Rpc / Tfplugin6Rpc)"]
-        Codec["CtyCodec"]
-    end
-
-    subgraph Subprocess["Provider subprocess"]
-        Bin["Terraform provider binary<br/>(e.g. terraform-provider-random)"]
-    end
-
-    App -- "1. ensureProvider(addr, version)" --> Registry
-    Registry -- "GPG-verified binary path" --> App
-    App -- "2. new GoPluginClient(path)" --> Client
-    Client -- "3. launch process, magic cookie" --> Bin
-    Bin -- "4. go-plugin handshake line" --> Client
-    Client -- "5. gRPC channel + health check" --> Bin
-    Client -- "6. select facade by negotiated protocol" --> Rpc
-    App -- "7. getProviderSchema()" --> Rpc
-    App -- "8. encode(config)" --> Codec
-    Codec -- "cty msgpack" --> Rpc
-    Rpc -- "9. PlanResourceChange, ApplyResourceChange,<br/>ReadResource, ReadDataSource RPCs" --> Bin
-    Bin -- "state (cty msgpack)" --> Rpc
-    Rpc -- "cty msgpack" --> Codec
-    Codec -- "decode(bytes)" --> App
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/detail-dark.svg">
+  <img alt="Inside the JVM process, application code uses TerraformRegistryClient to fetch a provider, GoPluginClient to launch and handshake with it, the TerraformProviderRpc facade to make RPCs, and CtyCodec to translate cty msgpack payloads to and from Java maps; the only external process is the provider subprocess." src="docs/diagrams/detail-light.svg">
+</picture>
 
 1. **`TerraformRegistryClient`** resolves a provider address (e.g.
    `hashicorp/random`) and version constraint against

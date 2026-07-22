@@ -1,0 +1,17 @@
+flowchart LR
+    App["Any JVM application<br/>(Java · Kotlin · Scala)"]
+    Lib["tfplugin-jvm"]
+
+    subgraph Providers["Unmodified Terraform provider binaries"]
+        direction TB
+        AWS["aws"]
+        GCP["google"]
+        AZ["azurerm"]
+        Etc["… the Terraform<br/>provider ecosystem"]
+    end
+
+    Cloud["Cloud &amp; SaaS APIs"]
+
+    App -->|"embeds"| Lib
+    Lib -->|"launch · go-plugin / gRPC"| Providers
+    Providers -->|"provider SDKs"| Cloud
