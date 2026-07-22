@@ -42,6 +42,36 @@ the entire Terraform provider ecosystem underneath Kite's own IaC language.
 
 ## Architecture
 
+### The big picture
+
+`tfplugin-jvm` is a library you embed in a JVM process. It drives the
+**unmodified** Terraform provider binaries — the same ones Terraform itself
+downloads and runs — so a single dependency reaches the entire Terraform
+provider ecosystem (AWS, Google Cloud, Azure, and thousands more) with no Go
+code, no per-provider SDKs, and no separate sidecar process.
+
+```mermaid
+flowchart LR
+    App["Any JVM application<br/>(Java · Kotlin · Scala)"]
+    Lib["tfplugin-jvm"]
+
+    subgraph Providers["Unmodified Terraform provider binaries"]
+        direction TB
+        AWS["aws"]
+        GCP["google"]
+        AZ["azurerm"]
+        Etc["… the Terraform<br/>provider ecosystem"]
+    end
+
+    Cloud["Cloud &amp; SaaS APIs"]
+
+    App -->|"embeds"| Lib
+    Lib -->|"launch · go-plugin / gRPC"| Providers
+    Providers -->|"provider SDKs"| Cloud
+```
+
+### In detail
+
 Everything left of the process boundary below is this library, running
 in-process with your application. The only external process is the Terraform
 provider binary itself — there is no sidecar, no Go code to maintain, and no
