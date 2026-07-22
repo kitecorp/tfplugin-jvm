@@ -21,13 +21,19 @@ The client role is not even packaged as a standalone Go library:
 ("gRPC client library similar to hashicorp/terraform-plugin-go") is an open
 request for exactly that, still unresolved.
 
-Pulumi's Java SDK does not speak `tfplugin` either. It reaches Terraform
-providers indirectly: Pulumi's own RPC protocol talks to a Go-based bridge
-process (`pulumi-resource-terraform-provider` /
-`pulumi-terraform-bridge`), which is what actually drives the provider binary.
-No JVM code in that path ever performs the go-plugin handshake or speaks
-tfplugin5/6 directly — `tfplugin-jvm` does, from Java, with no Go process of
-its own to maintain.
+Pulumi's Java SDK does not speak `tfplugin` either, and — this is easy to
+assume otherwise — it does not shell out to a Terraform provider binary at
+runtime at all. Pulumi bridges a Terraform provider by compiling that
+provider's own Go source directly into a single Pulumi-native binary via
+[`pulumi-terraform-bridge`](https://github.com/pulumi/pulumi-terraform-bridge)
+("Pulumi Terraform Bridge does not use the Terraform provider binaries.
+Instead, it creates a Pulumi provider based only on a Terraform provider's Go
+modules and provider schema" — the bridge's own README). The resulting binary
+speaks only Pulumi's own resource-provider RPC to the Pulumi engine and needs
+the original provider's Go source as a link-time dependency. `tfplugin-jvm`
+instead launches the unmodified Terraform provider binary — the same binary
+Terraform itself downloads and runs — and speaks its real go-plugin/tfplugin
+wire protocol directly from the JVM, no Go source or recompilation required.
 
 As of 2026, `tfplugin-jvm` appears to be the only JVM implementation of the
 Terraform provider *client* protocol in existence. It was extracted from the
