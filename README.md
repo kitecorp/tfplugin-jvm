@@ -106,6 +106,27 @@ Until then, consume it as a git submodule with a local Gradle dependency
 substitution (this is how the Kite workspace builds it), or `./gradlew
 publishToMavenLocal` and depend on `cloud.kitelang:tfplugin-jvm:0.1.0`.
 
+The build already configures Maven Central publishing (`maven-publish` +
+`signing` + JReleaser's Central Portal deploy, mirroring kite-cli's
+mechanism) — `./gradlew publishToMavenCentral` is wired but the first real
+release is a manual owner step: it needs secrets that are deliberately not
+committed to this repo. To cut the first release, a maintainer must add
+these under this repo's Settings > Secrets and variables > Actions, then run
+the `Publish tfplugin-jvm to Maven Central` workflow
+(`.github/workflows/publish-maven-central.yml`) via `workflow_dispatch`:
+
+| Secret | Purpose |
+|---|---|
+| `MAVEN_USERNAME` | Sonatype Central Portal token username (from central.sonatype.com/account) |
+| `MAVEN_PASSWORD` | Sonatype Central Portal token password |
+| `GPG_PUBLIC_KEY` | Armored ASCII public key: `gpg --armor --export YOUR_KEY_ID` |
+| `GPG_PRIVATE_KEY` | Armored ASCII private key: `gpg --armor --export-secret-keys YOUR_KEY_ID` |
+| `GPG_PASSPHRASE` | GPG key passphrase (empty string is fine if the key has none) |
+
+A verified `cloud.kitelang` namespace on the
+[Sonatype Central Portal](https://central.sonatype.com) is also required,
+once, outside of any secret.
+
 ## Build
 
 Requires JDK 21 (Gradle toolchain; auto-provisioned).
