@@ -31,6 +31,10 @@ import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.security.Provider;
 import java.util.Date;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +42,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -77,11 +82,30 @@ class TerraformRegistryClientDownloadTest {
     private volatile byte[] sigBytes;
     private volatile byte[] zipBytes;
 
+    // When set, the zip, SHA256SUMS and signature requests each wait (up to 3 s) until all three
+    // have arrived, and the most requests seen in flight at once is recorded.
+    private volatile CountDownLatch artifactGate;
+    private final AtomicInteger artifactsInFlight = new AtomicInteger();
+    private final AtomicInteger maxArtifactsInFlight = new AtomicInteger();
+
     @BeforeEach
     void setUp() throws IOException {
         server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.setExecutor(Executors.newCachedThreadPool());
         server.createContext("/", exchange -> {
             var path = exchange.getRequestURI().getPath();
+            var gate = artifactGate;
+            var isArtifact = path.endsWith("/SHA256SUMS.sig") || path.endsWith("/SHA256SUMS") || path.endsWith("/artifact.zip");
+            if (gate != null && isArtifact) {
+                maxArtifactsInFlight.accumulateAndGet(artifactsInFlight.incrementAndGet(), Math::max);
+                gate.countDown();
+                try {
+                    gate.await(3, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                artifactsInFlight.decrementAndGet();
+            }
             byte[] body;
             if (path.endsWith("/versions")) {
                 body = "{\"versions\":[{\"version\":\"3.6.0\"}]}".getBytes(StandardCharsets.UTF_8);
@@ -129,6 +153,23 @@ class TerraformRegistryClientDownloadTest {
         assertTrue(installed.toFile().canExecute(), "binary should be executable");
         assertArrayEquals(binaryContent, Files.readAllBytes(installed),
                 "installed binary must be the exact bytes extracted from the verified zip");
+    }
+
+    @Test
+    @DisplayName("should download the zip, SHA256SUMS and signature at the same time")
+    void shouldDownloadTheArtifactSumsAndSignatureInParallel() throws Exception {
+        var keyPair = generatePgpKeyPair();
+        var binaryContent = "PROVIDER-BINARY-CONTENT".getBytes(StandardCharsets.UTF_8);
+        zipBytes = zipWithEntry("terraform-provider-random", binaryContent);
+        sumsBytes = (sha256Hex(zipBytes) + "  " + REAL_ARTIFACT_FILENAME + "\n").getBytes(StandardCharsets.UTF_8);
+        sigBytes = detachedSign(sumsBytes, keyPair);
+        metadataJson = buildMetadata(List.of(armorPublicKey(keyPair.getPublicKey())));
+        artifactGate = new CountDownLatch(3);
+
+        var installed = client.ensureProvider("hashicorp/random", "3.6.0");
+
+        assertEquals(3, maxArtifactsInFlight.get());
+        assertArrayEquals(binaryContent, Files.readAllBytes(installed));
     }
 
     @Test

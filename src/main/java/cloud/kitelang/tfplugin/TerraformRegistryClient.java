@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -22,6 +23,8 @@ import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.zip.ZipInputStream;
 
 /**
@@ -78,7 +81,9 @@ public class TerraformRegistryClient {
     TerraformRegistryClient(Path cacheDir, String registryBase) {
         this.cacheDir = cacheDir;
         this.registryBase = registryBase;
+        // Responses are handled on virtual threads, so the parallel downloads below cost no platform threads
         this.httpClient = HttpClient.newBuilder()
+                .executor(Executors.newVirtualThreadPerTaskExecutor())
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(HTTP_TIMEOUT)
                 .build();
@@ -472,7 +477,7 @@ public class TerraformRegistryClient {
      *
      * <p>Verification is fail-closed: the binary is only cached once the registry-advertised GPG
      * signature over the {@code SHA256SUMS} file is valid <em>and</em> the binary matches the
-     * authenticated checksum (see {@link #verifyAndResolveChecksum(DownloadMetadata)}).
+     * authenticated checksum (see {@link #verifyAndResolveChecksum}).
      */
     private Path downloadProvider(String namespace, String type, String version) throws IOException {
         var os = detectOs();
@@ -485,24 +490,47 @@ public class TerraformRegistryClient {
         var metadataBody = httpGet(downloadUrl);
         var metadata = JSON.readValue(metadataBody, DownloadMetadata.class);
 
-        // 2. Download the zip to a temp file
+        // 2. Fail closed before downloading anything if there is nothing to verify against
+        var publicKeys = requireVerificationMaterial(metadata);
+
         var tempZip = Files.createTempFile("terraform-provider-", ".zip");
         try {
-            downloadFile(metadata.downloadUrl(), tempZip);
+            // 3. The zip, SHA256SUMS and its signature are independent, so fetch them at once
+            byte[] shasums;
+            byte[] signature;
+            try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                var zip = executor.submit(() -> {
+                    downloadFile(metadata.downloadUrl(), tempZip);
+                    return null;
+                });
+                var sums = executor.submit(() -> httpGetBytes(metadata.shasumsUrl()));
+                var sig = executor.submit(() -> httpGetBytes(metadata.shasumsSignatureUrl()));
+                zip.get();
+                shasums = sums.get();
+                signature = sig.get();
+            } catch (ExecutionException e) {
+                if (e.getCause() instanceof IOException io) {
+                    throw io;
+                }
+                throw new IOException(e.getCause().getMessage(), e.getCause());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new InterruptedIOException("Interrupted while downloading " + metadata.filename());
+            }
 
-            // 3. Establish an AUTHENTICATED checksum, then verify the binary against it.
+            // 4. Establish an AUTHENTICATED checksum, then verify the binary against it.
             //    Verifying only the checksum the registry hands back in JSON is not enough — the
             //    SHA256SUMS file is fetched over the network (often from a mirror) and is only
             //    trustworthy once its detached GPG signature is checked against the provider's key.
-            var expectedSha = verifyAndResolveChecksum(metadata);
+            var expectedSha = verifyAndResolveChecksum(metadata, publicKeys, shasums, signature);
             verifySha256(tempZip, expectedSha);
 
-            // 4. Extract the binary from the zip
+            // 5. Extract the binary from the zip
             var binaryPath = getCachedPath(namespace, type, version);
             Files.createDirectories(binaryPath.getParent());
             extractBinaryFromZip(tempZip, binaryPath, type);
 
-            // 5. Set executable permission
+            // 6. Set executable permission
             if (!binaryPath.toFile().setExecutable(true)) {
                 log.warn("Failed to set executable permission on {}", binaryPath);
             }
@@ -522,7 +550,8 @@ public class TerraformRegistryClient {
      * for the release, a {@code SHA256SUMS} URL, a detached {@code SHA256SUMS.<keyid>.sig} URL, and
      * the ASCII-armored GPG public key(s) that signed the sums file. We:
      * <ol>
-     *   <li>download the {@code SHA256SUMS} file and its detached signature;</li>
+     *   <li>download the {@code SHA256SUMS} file and its detached signature (the caller fetches
+     *       them alongside the artifact zip);</li>
      *   <li>verify the signature against the advertised public key(s) — this is the trust anchor;</li>
      *   <li>read the artifact's expected checksum from the now-trusted {@code SHA256SUMS}.</li>
      * </ol>
@@ -536,30 +565,19 @@ public class TerraformRegistryClient {
      * via the registry. The registry (reached over TLS) is therefore the root of trust for which key
      * is authoritative for a namespace; we do not pin keys out-of-band.
      *
-     * <p><b>Fail closed.</b> A missing key, missing sums/signature URL, a signature that does not
-     * verify, or an artifact absent from the signed sums all abort the install with an error — never
-     * a warning-and-continue.
+     * <p><b>Fail closed.</b> A missing key, missing sums/signature URL (checked before downloading,
+     * see {@link #requireVerificationMaterial}), a signature that does not verify, or an artifact
+     * absent from the signed sums all abort the install with an error — never a warning-and-continue.
      *
-     * @param metadata the registry download metadata
+     * @param metadata   the registry download metadata
+     * @param publicKeys the keys the registry advertised for this provider
+     * @param shasums    the downloaded {@code SHA256SUMS} file
+     * @param signature  its detached signature
      * @return the hex-encoded SHA256 checksum, proven to come from a signed {@code SHA256SUMS}
      * @throws IOException if any part of the trust chain cannot be established
      */
-    private String verifyAndResolveChecksum(DownloadMetadata metadata) throws IOException {
-        var publicKeys = advertisedPublicKeys(metadata);
-        if (publicKeys.isEmpty()) {
-            throw new IOException(
-                    "Refusing to install %s: registry advertised no GPG signing key to verify the SHA256SUMS"
-                            .formatted(metadata.filename()));
-        }
-        if (isBlank(metadata.shasumsUrl()) || isBlank(metadata.shasumsSignatureUrl())) {
-            throw new IOException(
-                    "Refusing to install %s: registry response is missing the SHA256SUMS or signature URL"
-                            .formatted(metadata.filename()));
-        }
-
-        var shasums = httpGetBytes(metadata.shasumsUrl());
-        var signature = httpGetBytes(metadata.shasumsSignatureUrl());
-
+    private String verifyAndResolveChecksum(DownloadMetadata metadata, List<String> publicKeys,
+                                            byte[] shasums, byte[] signature) throws IOException {
         if (!signatureVerifier.isValidAgainstAny(shasums, signature, publicKeys)) {
             throw new IOException(
                     "GPG signature verification FAILED for the SHA256SUMS of %s — refusing to install "
@@ -573,6 +591,27 @@ public class TerraformRegistryClient {
         return parseExpectedChecksum(sumsContent, metadata.filename())
                 .orElseThrow(() -> new IOException(
                         "The signed SHA256SUMS does not list artifact %s".formatted(metadata.filename())));
+    }
+
+    /**
+     * Fails closed before anything is downloaded when the registry gives nothing to verify
+     * the download against: no advertised signing key, or no SHA256SUMS / signature URL.
+     *
+     * @return the advertised ASCII-armored public keys
+     */
+    private List<String> requireVerificationMaterial(DownloadMetadata metadata) throws IOException {
+        var publicKeys = advertisedPublicKeys(metadata);
+        if (publicKeys.isEmpty()) {
+            throw new IOException(
+                    "Refusing to install %s: registry advertised no GPG signing key to verify the SHA256SUMS"
+                            .formatted(metadata.filename()));
+        }
+        if (isBlank(metadata.shasumsUrl()) || isBlank(metadata.shasumsSignatureUrl())) {
+            throw new IOException(
+                    "Refusing to install %s: registry response is missing the SHA256SUMS or signature URL"
+                            .formatted(metadata.filename()));
+        }
+        return publicKeys;
     }
 
     /**
