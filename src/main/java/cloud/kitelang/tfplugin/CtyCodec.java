@@ -171,9 +171,8 @@ public class CtyCodec {
      * or {@code "dynamic"}).
      *
      * <p>A value of another primitive type is converted first, as Terraform converts a
-     * configured value to the schema's type with cty's safe conversions: a bool or a
-     * number becomes its text, and the text of a bool or a number becomes that bool or
-     * number. hashicorp/aws, for one, types {@code skip_metadata_api_check} as a string
+     * configured value to the schema's type with cty's conversions: a bool or a number
+     * becomes its text, and the text of a bool or a number becomes that bool or number. hashicorp/aws, for one, types {@code skip_metadata_api_check} as a string
      * that holds a bool (kitecorp/kite#109). Anything else is refused naming the type.</p>
      */
     private void encodePrimitive(MessagePacker packer, Object value, String typeName) throws IOException {
@@ -204,10 +203,12 @@ public class CtyCodec {
         }
     }
 
+    /** cty reads "true" and "1" as true, "false" and "0" as false, and nothing else. */
     private static boolean toCtyBool(Object value) {
         return switch (value) {
             case Boolean bool -> bool;
-            case String text when text.equals("true") || text.equals("false") -> Boolean.parseBoolean(text);
+            case String text when text.equals("true") || text.equals("1") -> true;
+            case String text when text.equals("false") || text.equals("0") -> false;
             default -> throw cannotConvert(value, "bool");
         };
     }

@@ -414,6 +414,9 @@ public class GoPluginClient implements AutoCloseable {
         };
     }
 
+    /** The largest response accepted from a provider: go-plugin's own limit, math.MaxInt32. */
+    private static final int MAX_MESSAGE_SIZE = Integer.MAX_VALUE;
+
     /**
      * Builds a gRPC ManagedChannel from the handshake result.
      *
@@ -433,9 +436,6 @@ public class GoPluginClient implements AutoCloseable {
      * @param deadlineInterceptor the per-call deadline interceptor
      * @return a configured ManagedChannel ready for RPC calls
      */
-    /** The largest response accepted from a provider: go-plugin's own limit, math.MaxInt32. */
-    private static final int MAX_MESSAGE_SIZE = Integer.MAX_VALUE;
-
     private static ManagedChannel buildChannel(HandshakeResult handshake, RpcDeadlineInterceptor deadlineInterceptor) {
         return switch (handshake.networkType()) {
             case "unix" -> {

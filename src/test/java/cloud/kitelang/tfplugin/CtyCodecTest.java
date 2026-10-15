@@ -653,8 +653,19 @@ class CtyCodecTest {
         }
 
         @Test
+        void wholeFractionForAString_isWrittenWithoutItsZeros() {
+            assertEquals("2", convert(2.0, "string"));
+        }
+
+        @Test
         void textOfABoolForABool_isTheBool() {
             assertEquals(false, convert("false", "bool"));
+        }
+
+        /** cty also reads "1" and "0" as a bool (go-cty convert/conversion_primitive.go). */
+        @Test
+        void oneAndZeroForABool_areTrueAndFalse() {
+            assertEquals(List.of(true, false), List.of(convert("1", "bool"), convert("0", "bool")));
         }
 
         @Test
