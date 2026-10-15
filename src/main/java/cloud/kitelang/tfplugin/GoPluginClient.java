@@ -425,10 +425,17 @@ public class GoPluginClient implements AutoCloseable {
      * built from it (protocol facade, raw stub, health stub) carries a per-call
      * deadline (kitecorp/kite#33).</p>
      *
+     * <p>Responses may be as large as Terraform's own client accepts: go-plugin lifts
+     * gRPC's default 4 MiB limit, and real providers rely on it (hashicorp/aws 6.x
+     * answers GetSchema with about 7.5 MB; kitecorp/kite#109).</p>
+     *
      * @param handshake           the parsed handshake result
      * @param deadlineInterceptor the per-call deadline interceptor
      * @return a configured ManagedChannel ready for RPC calls
      */
+    /** The largest response accepted from a provider: go-plugin's own limit, math.MaxInt32. */
+    private static final int MAX_MESSAGE_SIZE = Integer.MAX_VALUE;
+
     private static ManagedChannel buildChannel(HandshakeResult handshake, RpcDeadlineInterceptor deadlineInterceptor) {
         return switch (handshake.networkType()) {
             case "unix" -> {
@@ -439,12 +446,14 @@ public class GoPluginClient implements AutoCloseable {
                         .eventLoopGroup(eventLoopGroup)
                         .channelType(io.grpc.netty.shaded.io.netty.channel.socket.nio.NioDomainSocketChannel.class)
                         .intercept(deadlineInterceptor)
+                        .maxInboundMessageSize(MAX_MESSAGE_SIZE)
                         .usePlaintext()
                         .build();
             }
             default -> ManagedChannelBuilder
                     .forTarget(handshake.networkAddr())
                     .intercept(deadlineInterceptor)
+                    .maxInboundMessageSize(MAX_MESSAGE_SIZE)
                     .usePlaintext()
                     .build();
         };
