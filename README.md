@@ -1,7 +1,7 @@
 # tfplugin-jvm
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Java](https://img.shields.io/badge/Java-21%2B-orange.svg)](https://openjdk.org/)
+[![Java](https://img.shields.io/badge/Java-25%2B-orange.svg)](https://openjdk.org/)
 [![Maven Central](https://img.shields.io/badge/Maven%20Central-pending-lightgrey.svg)](https://github.com/kitecorp/tfplugin-jvm/issues/2)
 
 A **JVM client for the Terraform plugin protocol**. It launches any Terraform
@@ -228,7 +228,7 @@ once, outside of any secret.
 
 ## Build
 
-Requires JDK 21 (Gradle toolchain; auto-provisioned).
+Requires JDK 25 (Gradle toolchain; auto-provisioned).
 
 ```bash
 ./gradlew build   # compile + protocol tests
