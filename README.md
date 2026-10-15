@@ -189,11 +189,11 @@ Not yet published to Maven Central — tracked in
 [kitecorp/tfplugin-jvm#2](https://github.com/kitecorp/tfplugin-jvm/issues/2).
 Until then, consume it as a git submodule with a local Gradle dependency
 substitution (this is how the Kite workspace builds it), or `./gradlew
-publishToMavenLocal` and depend on `cloud.kitelang:tfplugin-jvm:0.1.0`.
+publishToMavenLocal` and depend on `cloud.kitelang:tfplugin-jvm:0.2.0`.
 
 ```groovy
 // Gradle, once published
-implementation 'cloud.kitelang:tfplugin-jvm:0.1.0'
+implementation 'cloud.kitelang:tfplugin-jvm:0.2.0'
 ```
 
 ```xml

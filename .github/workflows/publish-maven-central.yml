@@ -14,7 +14,7 @@
 #
 # Usage:
 #   Once published, consumers add the library as a dependency:
-#     implementation 'cloud.kitelang:tfplugin-jvm:0.1.0'
+#     implementation 'cloud.kitelang:tfplugin-jvm:0.2.0'
 
 name: Publish tfplugin-jvm to Maven Central
 
@@ -31,7 +31,7 @@ jobs:
         with:
           fetch-depth: 0  # Required for JReleaser
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
           java-version: '25'

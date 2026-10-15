@@ -7,7 +7,7 @@ plugins {
 }
 
 group = 'cloud.kitelang'
-version = '0.1.0'
+version = '0.2.0'
 
 repositories {
     mavenLocal()
@@ -209,4 +209,18 @@ tasks.register('publishToMavenCentral') {
 
 tasks.named('jreleaserDeploy') {
     dependsOn 'publishAllPublicationsToStagingDeployRepository'
+}
+
+// Mockito's inline mock maker needs its Java agent; Java 25 warns when it is loaded
+// dynamically and a future JDK will refuse, so it is attached at JVM start instead
+configurations {
+    mockitoAgent
+}
+dependencies {
+    mockitoAgent('org.mockito:mockito-core:5.24.0') {
+        transitive = false
+    }
+}
+tasks.named('test') {
+    jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
 }
