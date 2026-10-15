@@ -169,15 +169,53 @@ public class CtyCodec {
     /**
      * Encode a primitive value ({@code "string"}, {@code "number"}, {@code "bool"},
      * or {@code "dynamic"}).
+     *
+     * <p>A value of another primitive type is converted first, as Terraform converts a
+     * configured value to the schema's type with cty's safe conversions: a bool or a
+     * number becomes its text, and the text of a bool or a number becomes that bool or
+     * number. hashicorp/aws, for one, types {@code skip_metadata_api_check} as a string
+     * that holds a bool (kitecorp/kite#109). Anything else is refused naming the type.</p>
      */
     private void encodePrimitive(MessagePacker packer, Object value, String typeName) throws IOException {
         switch (typeName) {
-            case "string" -> packer.packString((String) value);
-            case "number" -> encodeNumber(packer, value);
-            case "bool" -> packer.packBoolean((Boolean) value);
+            case "string" -> packer.packString(toCtyString(value));
+            case "number" -> encodeNumber(packer, value instanceof String text ? toCtyNumber(text) : value);
+            case "bool" -> packer.packBoolean(toCtyBool(value));
             case "dynamic" -> encodeDynamic(packer, value);
             default -> throw new IllegalArgumentException("Unknown primitive cty type: " + typeName);
         }
+    }
+
+    private static String toCtyString(Object value) {
+        return switch (value) {
+            case String text -> text;
+            case Boolean bool -> bool.toString();
+            // cty writes a number in its shortest decimal form: 2.0 is "2"
+            case Number number -> new BigDecimal(number.toString()).stripTrailingZeros().toPlainString();
+            default -> throw cannotConvert(value, "string");
+        };
+    }
+
+    private static BigDecimal toCtyNumber(String text) {
+        try {
+            return new BigDecimal(text);
+        } catch (NumberFormatException e) {
+            throw cannotConvert(text, "number");
+        }
+    }
+
+    private static boolean toCtyBool(Object value) {
+        return switch (value) {
+            case Boolean bool -> bool;
+            case String text when text.equals("true") || text.equals("false") -> Boolean.parseBoolean(text);
+            default -> throw cannotConvert(value, "bool");
+        };
+    }
+
+    private static IllegalArgumentException cannotConvert(Object value, String typeName) {
+        var shown = value instanceof String text ? '"' + text + '"' : String.valueOf(value);
+        return new IllegalArgumentException("Cannot convert %s (%s) to cty type %s"
+                .formatted(shown, value.getClass().getSimpleName(), typeName));
     }
 
     /**

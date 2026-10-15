@@ -620,4 +620,62 @@ class CtyCodecTest {
             assertEquals(first.get("b"), second.get("b"));
         }
     }
+
+    /**
+     * Terraform converts a configured value to the schema's type before it reaches the
+     * provider, using cty's safe primitive conversions. hashicorp/aws types
+     * skip_metadata_api_check as a string, so a kitefile's {@code skipMetadataApiCheck: true}
+     * arrives as a Boolean, and encoding it failed with a ClassCastException
+     * (kitecorp/kite#109).
+     */
+    @Nested
+    @DisplayName("Conversion to the schema's primitive type")
+    class PrimitiveConversion {
+
+        private Object convert(Object value, String type) {
+            var schema = "[\"object\", {\"v\": \"" + type + "\"}]";
+            return codec.decode(codec.encode(Map.of("v", value), schema), schema).get("v");
+        }
+
+        @Test
+        void boolForAString_isItsText() {
+            assertEquals("true", convert(true, "string"));
+        }
+
+        @Test
+        void wholeNumberForAString_isItsDigits() {
+            assertEquals("5", convert(5, "string"));
+        }
+
+        @Test
+        void fractionForAString_isItsDecimalText() {
+            assertEquals("1.5", convert(1.5, "string"));
+        }
+
+        @Test
+        void textOfABoolForABool_isTheBool() {
+            assertEquals(false, convert("false", "bool"));
+        }
+
+        @Test
+        void textOfANumberForANumber_isTheNumber() {
+            assertEquals(new BigDecimal("42"), convert("42", "number"));
+        }
+
+        @Test
+        void textThatIsNoBool_isRefusedNamingTheType() {
+            var exception = assertThrows(IllegalArgumentException.class, () -> convert("yes", "bool"));
+
+            assertEquals("Cannot convert \"yes\" (String) to cty type bool", exception.getMessage());
+        }
+
+        @Test
+        void listForAString_isRefusedNamingTheType() {
+            var list = new java.util.ArrayList<>(List.of("a"));
+
+            var exception = assertThrows(IllegalArgumentException.class, () -> convert(list, "string"));
+
+            assertEquals("Cannot convert [a] (ArrayList) to cty type string", exception.getMessage());
+        }
+    }
 }
